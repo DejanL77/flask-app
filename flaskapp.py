@@ -8,38 +8,47 @@ from flask_pymongo import PyMongo
 
 
 app = Flask(__name__)
-mongo_client = MongoClient('mongodb://localhost:27017')
-mongo_db = mongo_client['users_vouchers']
+app.config["MONGO_URI"] = "mongodb://localhost:27017/users_vouchers" 
 mongo = PyMongo(app)
+db = mongo.db
+UserInfo = db.UserInfo
+UserSpending = db.UserSpending
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users_vouchers.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
+@app.route('/')
+def home():
+    return 'Hello, Flask!'
 
-#db = 'C:\\Users\\deki_\\OneDrive\\Desktop\\pythonsemos\\flask\\flask-app\\users_vouchers.db'
-class UserInfo(db.Model):
-    user_id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False)
-    email = db.Column(db.String(50), nullable=False)
-    age = db.Column(db.Integer, nullable=False)
+@app.route('/all_users', methods=['GET'])
+def all_users():
+    all_users_info = UserInfo.find()
 
-class UserSpending(db.Model):
-    user_id = db.Column(db.Integer, primary_key=True)
-    money_spent = db.Column(db.Float, nullable=False)
-    year = db.Column(db.Integer, nullable=False)
+    if not all_users_info:
+        return jsonify({'message': 'No users found.'}), 404
+
+    users_data = [
+        {
+            'user_id': user['user_id'],
+            'name': user['name'],
+            'email': user['email'],
+            'age': user['age']
+        } for user in all_users_info
+    ]
+
+    return jsonify({'users': users_data})
+
 
 #1 endpoint
-@app.route('/average_spending_by_age/<int:user_id>', methods=['GET'])
+@app.route('/average_spending_by_age/<int:id>', methods=['GET'])
 def average_spending_by_age(id):
-    user_info = UserInfo.query.filter_by(user_id=id).first()
+    user_info = UserInfo.find_one({"user_id": id})
 
     if not user_info:
         return jsonify({'message': 'User not found.'}), 404
 
-    user_name = user_info.name
+    user_name = user_info.get('name')
 
-    user_spending = UserSpending.query.filter_by(user_id=id).all()
-    total_spending = sum(entry.money_spent for entry in user_spending)
+    user_spending_entries = UserSpending.find({"user_id": id})
+    total_spending = sum(entry.get('money_spent', 0) for entry in user_spending_entries)
 
     return jsonify({'user_id': id, 'user_name': user_name, 'total_spending': total_spending})
 
@@ -57,13 +66,13 @@ def average_spending_by_age_range():
     average_spending_by_age_range = {}
 
     for range_name, (lower, upper) in age_ranges.items():
-        users_in_range = UserInfo.query.filter(UserInfo.age >= lower, UserInfo.age <= upper).all()
+        users_in_range = UserInfo.find(UserInfo.age >= lower, UserInfo.age <= upper).all()
         
         total_spending_in_range = 0
         total_users_in_range = len(users_in_range)
 
         for user in users_in_range:
-            user_spending_entry = UserSpending.query.filter_by(user_id=user.user_id).first()
+            user_spending_entry = UserSpending.find_one(user_id=user.user_id).first()
             if user_spending_entry:
                 total_spending_in_range += user_spending_entry.money_spent
 
@@ -117,3 +126,6 @@ def user_spending_records():
         })
 
     return jsonify({'user_spending_records': records})
+
+if __name__ == '__main__':
+    app.run(debug=True)
