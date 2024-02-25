@@ -5,6 +5,7 @@ from pymongo import MongoClient
 import requests
 from flask_sqlalchemy import SQLAlchemy
 from flask_pymongo import PyMongo
+from http import HTTPMethod
 
 
 app = Flask(__name__)
@@ -18,6 +19,7 @@ UserSpending = db.UserSpending
 def home():
     return 'Hello, Flask!'
 
+# http://127.0.0.1:5000/all_users
 @app.route('/all_users', methods=['GET'])
 def all_users():
     all_users_info = UserInfo.find()
@@ -38,6 +40,7 @@ def all_users():
 
 
 #1 endpoint
+# http://127.0.0.1:5000/average_spending_by_age/5
 @app.route('/average_spending_by_age/<int:id>', methods=['GET'])
 def average_spending_by_age(id):
     user_info = UserInfo.find_one({"user_id": id})
@@ -53,6 +56,7 @@ def average_spending_by_age(id):
     return jsonify({'user_id': id, 'user_name': user_name, 'total_spending': total_spending})
 
 #2 endpoint
+# http://127.0.0.1:5000/average_spending_by_age_range
 @app.route('/average_spending_by_age_range', methods=['GET'])
 def average_spending_by_age_range():
     age_ranges = {
@@ -66,15 +70,15 @@ def average_spending_by_age_range():
     average_spending_by_age_range = {}
 
     for range_name, (lower, upper) in age_ranges.items():
-        users_in_range = UserInfo.find(UserInfo.age >= lower, UserInfo.age <= upper).all()
+        users_in_range = mongo.db.UserInfo.find({"age": {"$gte": lower, "$lte": upper}})
         
         total_spending_in_range = 0
-        total_users_in_range = len(users_in_range)
+        total_users_in_range = mongo.db.UserInfo.count_documents({"age": {"$gte": lower, "$lte": upper}})
 
         for user in users_in_range:
-            user_spending_entry = UserSpending.find_one(user_id=user.user_id).first()
+            user_spending_entry = mongo.db.UserSpending.find_one({"user_id": user['user_id']})
             if user_spending_entry:
-                total_spending_in_range += user_spending_entry.money_spent
+                total_spending_in_range += user_spending_entry['money_spent']
 
         average_spending = total_spending_in_range / total_users_in_range if total_users_in_range > 0 else 0
         average_spending_by_age_range[range_name] = average_spending
@@ -82,6 +86,9 @@ def average_spending_by_age_range():
     return jsonify({'average_spending_by_age_range': average_spending_by_age_range})
 
 #3 endpoint
+# vo nov bash terminal otkako e startuvana flaskapp.py:
+# http POST http://127.0.0.1:5000/write_to_mongodb user_id:=3002 money_spent:=55.5 year:=2023
+
 user_spending_schema = {
     "type": "object",
     "properties": {
@@ -103,16 +110,17 @@ def write_to_mongodb():
             return jsonify({'message': f'Validation error: {str(e)}'}), 400
 
         try:
-            mongo.db.user_spending.insert_one(data)
+            mongo.db.UserSpending.insert_one(data)
             return jsonify({'message': 'Data written to MongoDB successfully.'}), 201
         except Exception as e:
             return jsonify({'message': f'Error writing to MongoDB: {str(e)}'}), 500
     else:
         return jsonify({'message': 'Method Not Allowed'}), 405
 
+# http://127.0.0.1:5000/user_spending_records
 @app.route('/user_spending_records', methods=['GET'])
 def user_spending_records():
-    user_spending_data = list(mongo.db.user_spending.find())
+    user_spending_data = list(mongo.db.UserSpending.find())
 
     if len(user_spending_data) == 0:
         return jsonify({'message': 'No user spending records found.'}), 404
