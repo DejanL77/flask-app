@@ -1,5 +1,4 @@
-Flask App README
-Introduction
+##Introduction
 This README.md file provides an in-depth explanation of the Flask application code. The application is designed to handle user information and spending records. It uses Flask as the web framework and MongoDB as the database for storing user information and spending records.
 
 Libraries Used
